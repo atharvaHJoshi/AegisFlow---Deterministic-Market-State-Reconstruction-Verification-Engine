@@ -102,6 +102,290 @@ enough. MarketState provides the proof.
 
 ---
 
+## System diagrams
+
+The diagrams below use [Mermaid](https://mermaid.js.org/) and render on GitHub and
+in Mermaid-aware Markdown viewers.
+
+### System architecture (components)
+
+```mermaid
+graph TB
+    subgraph EXT["External inputs"]
+        GEN["Chaos generator<br/>tools/generator/marketgen.py"]
+        CLEAN[["clean authoritative stream<br/>demo_clean.txt"]]
+        FAULTY[["fault-injected wire stream<br/>demo_faulty.txt"]]
+        SCN[["scenario.json"]]
+    end
+
+    subgraph ENGINE["C++ engine — core/ (C++20)"]
+        CLI["CLI · main.cpp<br/>run | replay | recover | bench"]
+        CODEC["Event codec + validation<br/>FNV-1a checksum · schema"]
+        SEQ["Sequence tracker<br/>duplicate · reorder buffer · gaps"]
+        RECON["Reconciler<br/>recovery FSM"]
+        SE["StateEngine<br/>log-first commit protocol"]
+        BOOK["Order books<br/>integer ticks · canonical state"]
+        MET["Metrics<br/>throughput + log-linear latency"]
+    end
+
+    subgraph DUR["Durability"]
+        LOG[("Durable event log<br/>SQLite / memory")]
+        CP[("Checkpoints")]
+    end
+
+    subgraph REF["Independent reference models"]
+        PY["Python · model.py"]
+        ML["OCaml · model.ml"]
+    end
+
+    subgraph TOOLS["Verification tooling"]
+        XCHK["crosscheck.py"]
+        VER["verify.py · 4 checks"]
+        EXP["experiment.py"]
+    end
+
+    subgraph OUT["Outputs"]
+        STATE[["canonical .state"]]
+        MJSON[["metrics.json"]]
+        REPORT[["report.json / report.html"]]
+    end
+
+    GEN --> CLEAN
+    GEN --> FAULTY
+    GEN --> SCN
+    CLEAN --> CODEC
+    FAULTY --> CODEC
+    CLEAN -. retransmission source .-> RECON
+    CLI --> SE
+    SE --> CODEC
+    CODEC --> SEQ
+    SEQ --> RECON
+    RECON --> SE
+    SE --> BOOK
+    SE --> MET
+    SE --> LOG
+    LOG --> CP
+    LOG -. replay suffix .-> SE
+    BOOK --> STATE
+    MET --> MJSON
+    CLEAN --> PY
+    CLEAN --> ML
+    STATE --> XCHK
+    PY --> XCHK
+    ML --> XCHK
+    STATE --> VER
+    XCHK --> VER
+    VER --> EXP
+    EXP --> REPORT
+```
+
+### Data flow diagram
+
+**DFD Level 0 — context.** The whole engine as one process with its external
+entities.
+
+```mermaid
+flowchart LR
+    FEED["Market feed /<br/>chaos generator"]
+    OP["Operator<br/>(CLI / run.sh)"]
+    REF["Independent<br/>reference models"]
+
+    SYS(("0<br/>MarketState<br/>Engine"))
+
+    OP -->|"commands + config"| SYS
+    FEED -->|"wire events<br/>+ clean history"| SYS
+    SYS -->|"canonical state,<br/>metrics, recovery report"| OP
+    SYS -->|"authoritative history"| REF
+    REF -->|"reference state"| SYS
+    SYS -->|"PASS / FAIL"| OP
+```
+
+**DFD Level 1 — major processes and data stores.** Rounded nodes are processes,
+cylinders are data stores, rectangles are external entities.
+
+```mermaid
+flowchart LR
+    FEED["External entity<br/>Market feed / generator"]
+    OP["External entity<br/>Operator · CLI"]
+    REF["External entity<br/>Reference models"]
+
+    P1(("1.0<br/>Decode &<br/>validate"))
+    P2(("2.0<br/>Sequence<br/>track"))
+    P3(("3.0<br/>Reconcile &<br/>recover"))
+    P4(("4.0<br/>Commit &<br/>apply"))
+    P5(("5.0<br/>Checkpoint &<br/>restore"))
+    P6(("6.0<br/>Verify"))
+
+    D1[("D1 · Durable<br/>event log")]
+    D2[("D2 · Checkpoints")]
+    D3[("D3 · Order<br/>books")]
+    D4[("D4 · Metrics /<br/>canonical state")]
+
+    OP -->|"run / replay / recover"| P1
+    FEED -->|"wire events"| P1
+    P1 -->|"valid events"| P2
+    P1 -->|"rejects + count"| D4
+    P2 -->|"disposition<br/>dup / gap / reorder"| P3
+    P3 -->|"retransmit request"| FEED
+    FEED -->|"recovered events"| P3
+    P3 -->|"ordered ready events"| P4
+    P4 -->|"append (log-first)"| D1
+    P4 -->|"apply"| D3
+    P4 -->|"counters"| D4
+    D1 -->|"log suffix"| P5
+    D2 -->|"latest checkpoint"| P5
+    P5 -->|"restored state"| D3
+    OP -->|"verify request"| P6
+    D3 -->|"canonical state"| P6
+    REF -->|"reference state"| P6
+    P6 -->|"PASS / FAIL"| OP
+    D4 -->|"state + metrics"| OP
+```
+
+### Sequence diagrams
+
+**Ingest path** — validation, sequence tracking, gap recovery, log-first commit.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor OP as Operator / CLI
+    participant G as Generator
+    participant E as StateEngine
+    participant T as SequenceTracker
+    participant R as Reconciler
+    participant S as RecoverySource
+    participant L as IEventLog
+    participant B as OrderBook
+    participant M as Metrics
+
+    OP->>G: marketgen.py --faults ...
+    G-->>OP: clean.txt + faulty.txt
+    OP->>E: ingest(faulty stream)
+
+    loop each event
+        E->>E: validate + FNV-1a checksum
+        alt invalid / corrupt
+            E->>M: record_rejected()
+        else valid
+            E->>T: process(event)
+            T-->>E: Disposition
+            alt DUPLICATE or STALE
+                E->>M: record_duplicate / stale
+            else BUFFERED · gap outstanding
+                E->>M: record_buffered + record_gap
+                E->>R: recover()
+                R->>S: fetch(missing seq)
+                S-->>R: event / nullopt
+                R->>T: process(fetched)
+                R-->>E: ready events + report
+            else APPLIED
+                Note over T,E: ready = event + drained followers
+            end
+            E->>E: commit_and_apply(ready)
+            E->>L: append_batch (durability first)
+            E->>B: apply_event(event)
+            E->>M: record_applied(latency)
+        end
+    end
+
+    OP->>E: finalize()
+    E->>R: sync_from_source()
+    R->>S: fetch(next_expected)
+    S-->>R: tail events
+    E->>L: append_batch
+    E->>B: apply_event
+    OP->>E: canonical_state()
+    E-->>OP: canonical text
+```
+
+**Crash recovery path** — `recover --db`, checkpoint restore, log-suffix replay,
+and equivalence check against a full replay.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor OP as Operator
+    participant E as StateEngine
+    participant L as SqliteEventLog
+    participant B as OrderBook
+    participant T as SequenceTracker
+    participant F as full_replay_state
+
+    OP->>E: recover(db)
+    E->>L: latest_checkpoint("__engine__")
+    alt checkpoint exists and is valid
+        L-->>E: checkpoint (last_seq, state_data)
+        E->>B: deserialize_state(state_data)
+        E->>L: replay_from(last_seq + 1)
+        L-->>E: log suffix events
+        E->>B: apply_event(each)
+    else no checkpoint or corrupt
+        L-->>E: none / invalid
+        E->>B: clear + full replay from seq 1
+    end
+    E->>T: reset(max_seq + 1)
+    E->>T: set_state(VERIFIED)
+    E-->>OP: recovery report JSON
+
+    OP->>F: full_replay_state(db)
+    F->>L: replay_all()
+    L-->>F: full history
+    F-->>OP: full replay state
+    Note over OP: recovered_hash == full_replay_hash else exit(2)
+```
+
+### Flowcharts
+
+**Overall pipeline** — the `./run.sh` stages from build to report.
+
+```mermaid
+flowchart TD
+    START(["./run.sh"]) --> CHK["Stage 0 · check cmake / g++ / python3"]
+    CHK --> BUILD["Stage 1 · build C++ engine + tests"]
+    BUILD --> OCB["Stage 2 · build OCaml reference"]
+    OCB --> TEST{"Stage 3 · ctest"}
+    TEST -->|fail| STOP1(["Abort"])
+    TEST -->|pass| GEN["Stage 4a · generate clean + faulty streams"]
+    GEN --> RUN["Stage 4b · engine run on faulty<br/>recovery-source = clean"]
+    RUN --> REF["Reference models over clean history"]
+    REF --> VER{"verify.py · 4 checks pass?"}
+    VER -->|no| STOP2(["FAIL"])
+    VER -->|yes| XCHK["Stage 5 · crosscheck engine vs python vs ocaml"]
+    XCHK --> EQC{"byte-identical?"}
+    EQC -->|no| STOP3(["FAIL"])
+    EQC -->|yes| EXP["Stage 6 · experiment sweep<br/>bench + chaos + recovery"]
+    EXP --> REPORT["report.json + report.html"]
+    REPORT --> DONE(["Done"])
+```
+
+**Per-event ingestion** — the decision path for a single event line.
+
+```mermaid
+flowchart TD
+    A([read event line]) --> B{"decode + FNV-1a checksum ok?"}
+    B -->|no| R1["reject + count"] --> Z(["next event"])
+    B -->|yes| C{"schema / values valid?"}
+    C -->|no| R1
+    C -->|yes| D["SequenceTracker.process"]
+    D --> E{"disposition?"}
+    E -->|DUPLICATE| R2["count duplicate"] --> Z
+    E -->|STALE| R3["count stale"] --> Z
+    E -->|BUFFERED| F["hold event<br/>record gap"]
+    E -->|BUFFER_FULL| H["degrade stream<br/>BUFFER_FULL"] --> Z
+    E -->|APPLIED| I["ready = event + drained followers"]
+    F --> G["Reconciler.recover()"]
+    G --> J{"gap repaired?"}
+    J -->|yes| I
+    J -->|no| K["mark DEGRADED"] --> Z
+    I --> L["commit_and_apply(ready)"]
+    L --> M["append to durable log"]
+    M --> N["apply to order books"]
+    N --> O["record metrics"] --> Z
+```
+
+---
+
 ## Build
 
 Requirements: CMake ≥ 3.20, a C++20 compiler, SQLite3, GoogleTest (for tests),
