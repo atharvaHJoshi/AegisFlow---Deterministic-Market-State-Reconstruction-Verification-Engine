@@ -1,0 +1,37 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>MarketState Report</title>
+<style>
+ body { font-family: ui-monospace, Menlo, monospace; background:#0f1117; color:#e6e6e6; margin:2rem; }
+ h1,h2 { color:#7dd3fc; }
+ table { border-collapse: collapse; margin: 1rem 0 2rem; width:100%; }
+ th,td { border:1px solid #2a2f3a; padding:6px 10px; text-align:right; }
+ th { background:#1b2230; color:#a5b4fc; }
+ td:first-child, th:first-child { text-align:left; }
+ .ok { color:#4ade80; font-weight:bold; }
+ .bad { color:#f87171; font-weight:bold; }
+ .meta { color:#94a3b8; }
+</style></head><body>
+<h1>MarketState — Verification &amp; Performance Report</h1>
+<p class="meta">Generated 2026-10-13 12:47:54 on Linux-7.1.9-arch1-2-x86_64-with-glibc2.44</p>
+<h2>Throughput &amp; latency (clean stream)</h2>
+<table><tr><th>events</th><th>applied</th><th>throughput_eps</th><th>p50</th><th>p95</th><th>p99</th><th>p999</th></tr>
+<tr><td>10000</td><td>10000</td><td>850,947</td><td>256</td><td>768</td><td>2304</td><td>15360</td></tr>
+<tr><td>100000</td><td>100000</td><td>861,844</td><td>288</td><td>576</td><td>2304</td><td>5632</td></tr>
+<tr><td>1000000</td><td>1000000</td><td>825,972</td><td>320</td><td>704</td><td>2304</td><td>5632</td></tr></table>
+<h2>Chaos recovery (faulty stream + retransmission source)</h2>
+<table><tr><th>events</th><th>severity</th><th>dropped</th><th>duplicated</th><th>corrupted</th><th>duplicates_detected</th><th>events_rejected</th><th>events_recovered</th><th>unrecovered</th><th>equivalent_to_reference</th></tr>
+<tr><td>10000</td><td>light</td><td>90</td><td>97</td><td>47</td><td>284</td><td>47</td><td>324</td><td>0</td><td>True</td></tr>
+<tr><td>10000</td><td>medium</td><td>276</td><td>279</td><td>205</td><td>682</td><td>205</td><td>884</td><td>0</td><td>True</td></tr>
+<tr><td>10000</td><td>heavy</td><td>772</td><td>518</td><td>485</td><td>1174</td><td>485</td><td>1913</td><td>0</td><td>True</td></tr>
+<tr><td>100000</td><td>light</td><td>1040</td><td>958</td><td>509</td><td>2884</td><td>509</td><td>3475</td><td>0</td><td>True</td></tr>
+<tr><td>100000</td><td>medium</td><td>3023</td><td>2886</td><td>1988</td><td>7218</td><td>1988</td><td>9343</td><td>0</td><td>True</td></tr>
+<tr><td>100000</td><td>heavy</td><td>7968</td><td>5495</td><td>4897</td><td>12041</td><td>4897</td><td>19411</td><td>0</td><td>True</td></tr>
+<tr><td>1000000</td><td>light</td><td>10054</td><td>9801</td><td>5028</td><td>28598</td><td>5028</td><td>33879</td><td>0</td><td>True</td></tr>
+<tr><td>1000000</td><td>medium</td><td>30205</td><td>29229</td><td>20027</td><td>70904</td><td>20027</td><td>91907</td><td>0</td><td>True</td></tr>
+<tr><td>1000000</td><td>heavy</td><td>80167</td><td>55349</td><td>48810</td><td>120707</td><td>48810</td><td>194335</td><td>0</td><td>True</td></tr></table>
+<h2>Checkpoint + replay recovery</h2>
+<table><tr><th>events</th><th>used_checkpoint</th><th>checkpoint_seq</th><th>events_replayed</th><th>duration_us</th><th>equivalent</th></tr>
+<tr><td>10000</td><td>True</td><td>10000</td><td>0</td><td>1935</td><td>True</td></tr>
+<tr><td>100000</td><td>True</td><td>100000</td><td>0</td><td>5959</td><td>True</td></tr>
+<tr><td>1000000</td><td>True</td><td>1000000</td><td>0</td><td>5828</td><td>True</td></tr></table>
+</body></html>

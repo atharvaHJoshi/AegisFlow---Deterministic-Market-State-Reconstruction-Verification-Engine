@@ -1,0 +1,17 @@
+{
+  "description": "Example MarketState experiment configuration. Consumed by scripts/run_experiments.sh via SIZES/SEVERITIES/SEED environment variables.",
+  "seed": 42,
+  "symbols": ["AAPL", "MSFT", "GOOG"],
+  "sizes": [10000, 100000, 1000000],
+  "engine": {
+    "max_reorder_buffer": 10000,
+    "duplicate_window": 1000000,
+    "checkpoint_interval": "size/10",
+    "synchronous_log": true
+  },
+  "fault_profiles": {
+    "light":  {"drop": 0.01, "dup": 0.01, "reorder": 0.02, "delay": 0.0, "corrupt": 0.005},
+    "medium": {"drop": 0.03, "dup": 0.03, "reorder": 0.05, "delay": 0.0, "corrupt": 0.02},
+    "heavy":  {"drop": 0.08, "dup": 0.06, "reorder": 0.10, "delay": 0.0, "corrupt": 0.05}
+  }
+}

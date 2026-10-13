@@ -1,0 +1,28 @@
+# Build output
+/build/
+/build-*/
+cmake-build-*/
+
+# OCaml reference model build artifacts
+/reference/ocaml/_build/
+/reference/ocaml/*.cmi
+/reference/ocaml/*.cmx
+/reference/ocaml/*.cmo
+/reference/ocaml/*.o
+
+# Generated experiment data (regenerable via scripts/)
+/data/experiments/
+/data/verify/
+/data/tmp/
+/data/*.txt
+/data/*.sqlite
+/data/*.sqlite-*
+/data/*.metrics.json
+
+# Python
+__pycache__/
+*.pyc
+
+# Editor / OS
+.DS_Store
+*.swp

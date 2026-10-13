@@ -1,0 +1,25 @@
+{
+  "reference": "python",
+  "checks": {
+    "differential_vs_reference": {
+      "passed": true,
+      "engine_hash": "c8e9da5af1852e9b",
+      "reference_hash": "c8e9da5af1852e9b"
+    },
+    "deterministic_replay": {
+      "passed": true,
+      "run1_hash": "c8e9da5af1852e9b",
+      "run2_hash": "c8e9da5af1852e9b"
+    },
+    "recovery_equivalence": {
+      "passed": true,
+      "recovered_hash": "c8e9da5af1852e9b",
+      "reference_hash": "c8e9da5af1852e9b"
+    },
+    "unreliable_without_source_differs": {
+      "passed": true,
+      "degraded_hash": "c9aa91f01919f55e"
+    }
+  },
+  "passed": true
+}
